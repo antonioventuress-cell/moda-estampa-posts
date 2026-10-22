@@ -1,0 +1,18 @@
+# Só sobe pro GitHub o que a postagem automática usa.
+# Fotos brutas, bio-site, documentos do cliente etc. ficam só no PC.
+*
+!*/
+!/.gitignore
+!.github/**
+!automacao/**
+!stories/comum.py
+!stories/bom-dia/*/story.mp4
+!stories/promo-5-primeiras/*/story.mp4
+!instagram/fotos/padrao_foto.py
+!motion/vestidos_com_encerramento.py
+!motion/encerramento.mp4
+!motion/narracao-encerramento.mp3
+!motion/*.ttf
+!identidade-visual/final/logo-branco.png
+__pycache__/
+automacao/porteiro/.wrangler/

@@ -1,0 +1,19 @@
+name: renovar token do Instagram
+# o token do Instagram vence em 60 dias; renova todo dia 1º e salva de volta no segredo IG_TOKEN
+on:
+  schedule:
+    - cron: "0 10 1 * *"
+  workflow_dispatch:
+
+jobs:
+  renovar:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}   # token do GitHub com permissão de escrever segredos neste repositório
+        run: |
+          novo=$(curl -sf "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=$IG_TOKEN" | jq -r .access_token)
+          echo "::add-mask::$novo"
+          test -n "$novo" -a "$novo" != null
+          gh secret set IG_TOKEN --repo "$GITHUB_REPOSITORY" --body "$novo"
