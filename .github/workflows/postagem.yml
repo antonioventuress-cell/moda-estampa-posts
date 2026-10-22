@@ -1,21 +1,22 @@
 name: postagem
 on:
-  repository_dispatch:
-    types: [telegram]        # o porteiro (Cloudflare) acorda isso na hora em que você manda algo no Telegram
   schedule:
+    - cron: "*/5 * * * *"    # bot do Telegram (o GitHub atrasa: na prática 5 a 15 min)
     - cron: "0 12 * * *"     # 9h de Brasília: story de bom dia
     - cron: "0 14 * * 2,3"   # 11h de terça e quarta: promo das 5 primeiras
   workflow_dispatch:
     inputs:
-      tarefa: {type: choice, options: [bom-dia, promo, webhook], default: bom-dia}
+      tarefa: {type: choice, options: [bot, bom-dia, promo], default: bot}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   postar:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # fila separada por tarefa: um bot pendente nunca cancela um story pendente
+    concurrency: ${{ inputs.tarefa || github.event.schedule }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -26,16 +27,20 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          TG_SEGREDO: ${{ secrets.TG_SEGREDO }}
-          CF_TOKEN: ${{ secrets.CF_TOKEN }}
-          CF_ACCOUNT_ID: ${{ vars.CF_ACCOUNT_ID }}
-          CF_KV_ID: ${{ vars.CF_KV_ID }}
-          WORKER_URL: ${{ vars.WORKER_URL }}
         run: |
-          case "${{ github.event_name }}/${{ github.event.schedule }}" in
-            repository_dispatch/*) TAREFA=telegram ;;
-            "schedule/0 12 * * *") TAREFA=bom-dia ;;
-            "schedule/0 14 * * 2,3") TAREFA=promo ;;
-            *) TAREFA="${{ inputs.tarefa }}" ;;
+          case "${{ github.event.schedule }}" in
+            "0 12 * * *") TAREFA=bom-dia ;;
+            "0 14 * * 2,3") TAREFA=promo ;;
+            *) TAREFA="${{ inputs.tarefa || 'bot' }}" ;;
           esac
           python automacao/postar.py "$TAREFA"
+      - name: salvar fila e estado
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -qm "bot: fila/estado"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          exit 1
