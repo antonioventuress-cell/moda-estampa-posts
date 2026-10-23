@@ -127,7 +127,10 @@ def receber(msg):
 
 
 def responder(cb):
-    tg("answerCallbackQuery", callback_query_id=cb["id"])
+    try:  # só tira o "carregando" do botão; o Telegram recusa se o toque tem mais de alguns segundos (o bot roda depois)
+        tg("answerCallbackQuery", callback_query_id=cb["id"])
+    except RuntimeError:
+        pass
     if str(cb["from"]["id"]) != CHAT:
         return
     acao, nome = cb["data"].split(":")

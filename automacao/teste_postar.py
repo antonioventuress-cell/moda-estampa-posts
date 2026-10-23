@@ -16,6 +16,8 @@ FONTES = {"foto": PROJ / "WhatsApp Image 2026-10-20 at 10.26.23.jpeg", "vid": PR
 
 def tg(metodo, arquivos=None, **d):
     enviados.append((metodo, d))
+    if metodo == "answerCallbackQuery":  # como no real: o toque já é velho quando o bot roda
+        raise RuntimeError("Telegram answerCallbackQuery: query is too old")
     if metodo == "getUpdates":
         if d.get("offset") is not None:  # pedir a partir de N confirma (some) os anteriores
             fila_updates[:] = [u for u in fila_updates if u["update_id"] >= d["offset"]]
