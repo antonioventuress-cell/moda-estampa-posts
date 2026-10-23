@@ -188,10 +188,22 @@ def stories(tipo):
     avisar(f"Story {'de bom dia' if tipo == 'bom-dia' else 'da promo'} postado ✅")
 
 
+def conferir():
+    """Confere os segredos sem postar nada: lê a conta do Instagram e avisa no Telegram."""
+    try:
+        eu = ig("me", fields="user_id,username,account_type")
+    except Exception as e:
+        avisar(f"❌ O token do Instagram não funcionou: {e}")
+        raise
+    avisar(f"✅ Tudo ligado: Instagram @{eu.get('username')} (conta {eu.get('account_type')}) e Telegram funcionando.")
+
+
 if __name__ == "__main__":
     tarefa = sys.argv[1] if len(sys.argv) > 1 else "bot"
     if tarefa == "bot":
         bot()
+    elif tarefa == "conferir":
+        conferir()
     else:
         try:
             stories(tarefa)

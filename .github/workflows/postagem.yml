@@ -6,7 +6,7 @@ on:
     - cron: "0 14 * * 2,3"   # 11h de terça e quarta: promo das 5 primeiras
   workflow_dispatch:
     inputs:
-      tarefa: {type: choice, options: [bot, bom-dia, promo], default: bot}
+      tarefa: {type: choice, options: [bot, bom-dia, promo, conferir], default: bot}
 
 permissions:
   contents: write
