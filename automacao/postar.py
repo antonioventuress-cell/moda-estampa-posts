@@ -188,6 +188,15 @@ def stories(tipo):
     avisar(f"Story {'de bom dia' if tipo == 'bom-dia' else 'da promo'} postado ✅")
 
 
+def previa():
+    """Manda pro Telegram a prévia (com botões) de cada arquivo que já está na fila — p/ teste sem upload."""
+    for i, arq in enumerate(sorted(FILA.glob("*.*"))):
+        metodo, campo = ("sendPhoto", "photo") if arq.suffix == ".jpg" else ("sendVideo", "video")
+        with open(arq, "rb") as f:
+            tg(metodo, {campo: f}, chat_id=CHAT, caption=f"{LEGENDAS[i % len(LEGENDAS)]}\n\n{HASHTAGS}",
+               reply_markup=botoes(arq.name))
+
+
 def conferir():
     """Confere os segredos sem postar nada: lê a conta do Instagram e avisa no Telegram."""
     try:
@@ -204,6 +213,8 @@ if __name__ == "__main__":
         bot()
     elif tarefa == "conferir":
         conferir()
+    elif tarefa == "previa":
+        previa()
     else:
         try:
             stories(tarefa)
