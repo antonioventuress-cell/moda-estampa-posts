@@ -1,19 +1,41 @@
 name: renovar token do Instagram
-# o token do Instagram vence em 60 dias; renova todo dia 1º e salva de volta no segredo IG_TOKEN
+# O token do Instagram vence em 60 dias. Dia 1 e 15 ele é renovado e guardado CRIPTOGRAFADO em
+# automacao/ig_token.enc (senha no segredo IG_CHAVE). Assim não precisa de chave do GitHub pra reescrever segredos.
 on:
   schedule:
-    - cron: "0 10 1 * *"
+    - cron: "0 10 1,15 * *"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   renovar:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - env:
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_PAT }}   # token do GitHub com permissão de escrever segredos neste repositório
+          IG_CHAVE: ${{ secrets.IG_CHAVE }}
         run: |
+          if [ -f automacao/ig_token.enc ]; then
+            IG_TOKEN=$(openssl enc -d -aes-256-cbc -pbkdf2 -base64 -A -pass env:IG_CHAVE -in automacao/ig_token.enc)
+            echo "::add-mask::$IG_TOKEN"
+          fi
           novo=$(curl -sf "https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=$IG_TOKEN" | jq -r .access_token)
           echo "::add-mask::$novo"
           test -n "$novo" -a "$novo" != null
-          gh secret set IG_TOKEN --repo "$GITHUB_REPOSITORY" --body "$novo"
+          printf %s "$novo" | openssl enc -aes-256-cbc -pbkdf2 -salt -base64 -A -pass env:IG_CHAVE -out automacao/ig_token.enc
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add automacao/ig_token.enc
+          git commit -qm "bot: token do Instagram renovado"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
+          exit 1
+      - if: failure()
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          curl -s "https://api.telegram.org/bot$TELEGRAM_TOKEN/sendMessage" -d chat_id="$TELEGRAM_CHAT_ID" \
+            --data-urlencode text="❌ Não consegui renovar o token do Instagram. Me chama pra gerar um novo antes que ele vença." >/dev/null

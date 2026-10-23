@@ -27,7 +27,13 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           IG_TOKEN: ${{ secrets.IG_TOKEN }}
+          IG_CHAVE: ${{ secrets.IG_CHAVE }}
         run: |
+          if [ -f automacao/ig_token.enc ]; then  # token renovado pelo token.yml
+            IG_TOKEN=$(openssl enc -d -aes-256-cbc -pbkdf2 -base64 -A -pass env:IG_CHAVE -in automacao/ig_token.enc)
+            echo "::add-mask::$IG_TOKEN"
+            export IG_TOKEN
+          fi
           case "${{ github.event.schedule }}" in
             "0 12 * * *") TAREFA=bom-dia ;;
             "0 14 * * 2,3") TAREFA=promo ;;
