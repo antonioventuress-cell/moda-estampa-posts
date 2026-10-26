@@ -232,6 +232,7 @@ def conferir():
         avisar(f"❌ O token do Instagram não funcionou: {e}")
         raise
     parado = tg("getWebhookInfo")["pending_update_count"]  # mensagens que chegaram no bot e ninguém leu ainda
+    print(f"Instagram @{eu.get('username')} ({eu.get('account_type')}); mensagens esperando o bot: {parado}")
     avisar(f"✅ Tudo ligado: Instagram @{eu.get('username')} (conta {eu.get('account_type')}) e Telegram funcionando. "
            f"Mensagens esperando o bot: {parado}.")
 
