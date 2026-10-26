@@ -159,9 +159,24 @@ def responder(cb):
         avisar("Postado no Instagram ✅")
 
 
-def bot():
-    prox = None
-    while ups := tg("getUpdates", offset=prox, limit=1, timeout=0):  # um por vez: pedir o próximo confirma o anterior
+def salvar(motivo):
+    """No GitHub: sobe fila/ e estado pro repositório já (o Pages só serve o que foi enviado). No PC não faz nada."""
+    if os.environ.get("GITHUB_ACTIONS"):
+        subprocess.run(f'git add -A && (git diff --cached --quiet || (git commit -qm "bot: {motivo}" && '
+                       'for i in 1 2 3; do git pull -q --rebase && git push -q && break; sleep 5; done))',
+                       shell=True, cwd=RAIZ)
+
+
+def bot(duracao=0):
+    """Lê o Telegram. Com duracao (segundos) fica ouvindo esse tempo todo e responde na hora (escuta longa):
+    o agendamento do GitHub atrasa horas, então não dá pra depender dele rodar a cada 5 min."""
+    fim, prox = time.time() + duracao, None
+    while True:
+        ups = tg("getUpdates", offset=prox, limit=1, timeout=50 if duracao else 0)  # pedir o próximo confirma o anterior
+        if not ups:
+            if time.time() >= fim:
+                break
+            continue
         u = ups[0]
         prox = u["update_id"] + 1
         try:
@@ -171,15 +186,23 @@ def bot():
                 responder(u["callback_query"])
         except Exception as e:  # avisa e segue: um erro não pode travar a fila
             avisar(f"❌ Deu erro: {e}")
+        salvar("fila")
     if prox:
         tg("getUpdates", offset=prox, limit=1, timeout=0)  # confirma o último
 
 
+def agora():
+    return datetime.now(timezone(timedelta(hours=-3)))  # Brasília; sem horário de verão desde 2019
+
+
 def stories(tipo):
-    hoje = datetime.now(timezone(timedelta(hours=-3)))  # Brasília; sem horário de verão desde 2019
+    hoje = agora()
     estado = json.loads(ESTADO.read_text()) if ESTADO.exists() else {}
     if estado.get(tipo) == f"{hoje:%Y-%m-%d}":
-        return  # já postou hoje (ex.: rodou duas vezes)
+        return  # já postou hoje: o agendamento tem 3 tentativas, só a primeira que roda posta
+    if tipo == "bom-dia" and hoje.hour >= 12:
+        avisar("⚠️ O GitHub atrasou e já passou do meio-dia: pulei o bom dia de hoje.")
+        return
     pasta = f"stories/bom-dia/{hoje.isoweekday()}-*" if tipo == "bom-dia" else "stories/promo-5-primeiras/*"
     arquivos = sorted(RAIZ.glob(f"{pasta}/story.mp4"))  # promo: 1-gancho antes de 2-oferta
     if not arquivos:
@@ -188,6 +211,7 @@ def stories(tipo):
         publicar(PAGES + arq.relative_to(RAIZ).as_posix(), "STORIES")
     estado[tipo] = f"{hoje:%Y-%m-%d}"  # o commit diário disso também mantém o agendamento do GitHub ativo
     ESTADO.write_text(json.dumps(estado, indent=1))
+    salvar("estado")
     avisar(f"Story {'de bom dia' if tipo == 'bom-dia' else 'da promo'} postado ✅")
 
 
@@ -207,13 +231,15 @@ def conferir():
     except Exception as e:
         avisar(f"❌ O token do Instagram não funcionou: {e}")
         raise
-    avisar(f"✅ Tudo ligado: Instagram @{eu.get('username')} (conta {eu.get('account_type')}) e Telegram funcionando.")
+    parado = tg("getWebhookInfo")["pending_update_count"]  # mensagens que chegaram no bot e ninguém leu ainda
+    avisar(f"✅ Tudo ligado: Instagram @{eu.get('username')} (conta {eu.get('account_type')}) e Telegram funcionando. "
+           f"Mensagens esperando o bot: {parado}.")
 
 
 if __name__ == "__main__":
     tarefa = sys.argv[1] if len(sys.argv) > 1 else "bot"
     if tarefa == "bot":
-        bot()
+        bot(int(sys.argv[2]) if len(sys.argv) > 2 else 0)
     elif tarefa == "conferir":
         conferir()
     elif tarefa == "previa":

@@ -61,19 +61,29 @@ postar.receber({"chat": {"id": 42}, "message_id": 12, "video": {"file_id": "vid"
 assert enviados[-1][0] == "sendVideo" and enviados[-1][1]["caption"].startswith("Minha legenda")
 postar.responder(cb("del", "12.mp4"))
 assert not (postar.FILA / "12.mp4").exists() and len(publicados) == 1
-# 7) stories: bom dia do dia certo, promo na ordem, não repete no mesmo dia
+# 7) stories: bom dia do dia certo, promo na ordem, não repete no mesmo dia; depois do meio-dia pula o bom dia
+oito_horas = postar.agora().replace(hour=8)
+postar.agora = lambda: oito_horas
 postar.stories("bom-dia")
-dia = postar.datetime.now(postar.timezone(postar.timedelta(hours=-3))).isoweekday()
+dia = oito_horas.isoweekday()
 assert publicados[-1][1] == "STORIES" and f"/stories/bom-dia/{dia}-" in publicados[-1][0]
 postar.stories("bom-dia")
 assert len(publicados) == 2
 postar.stories("promo")
 assert [p[0].split("/")[-2] for p in publicados[-2:]] == ["1-gancho", "2-oferta"]
+postar.ESTADO.unlink()
+postar.agora = lambda: oito_horas.replace(hour=13)
+postar.stories("bom-dia")
+assert len(publicados) == 4 and "pulei o bom dia" in enviados[-1][1]["text"]
 # 8) loop do bot: uma mensagem com erro avisa e não trava a próxima
 fila_updates += [{"update_id": 5, "message": {"chat": {"id": 42}, "message_id": 13, "photo": [{"file_id": "nao-existe"}]}},
                  {"update_id": 6, "message": {"chat": {"id": 42}, "message_id": 14, "photo": [{"file_id": "foto"}]}}]
 postar.bot()
 assert any(m == "sendMessage" and "Deu erro" in d.get("text", "") for m, d in enviados)
 assert (postar.FILA / "14.jpg").exists() and not fila_updates
+# 9) escuta longa: com a fila vazia, para sozinha quando o tempo acaba (não trava)
+import time as _t
+t0 = _t.time(); postar.bot(0.3)
+assert 0.3 <= _t.time() - t0 < 5
 shutil.rmtree(tmp)
 print("ok: todos os testes passaram")

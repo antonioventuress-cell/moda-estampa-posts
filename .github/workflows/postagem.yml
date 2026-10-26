@@ -1,9 +1,12 @@
 name: postagem
+# O agendamento grátis do GitHub atrasa horas (o "a cada 5 min" rodava a cada 2-5 h). Por isso:
+# - o bot fica ~5h40 OUVINDO o Telegram (responde na hora) e o próximo já espera na fila pra assumir;
+# - cada story tem 3 tentativas; a primeira que roda posta e as outras veem no estado que já foi.
 on:
   schedule:
-    - cron: "*/5 * * * *"    # bot do Telegram (o GitHub atrasa: na prática 5 a 15 min)
-    - cron: "0 12 * * *"     # 9h de Brasília: story de bom dia
-    - cron: "0 14 * * 2,3"   # 11h de terça e quarta: promo das 5 primeiras
+    - cron: "17 * * * *"            # bot: escuta longa (só um por vez; o seguinte espera)
+    - cron: "7 9,10,11 * * *"       # bom dia: 6h07, 7h07 e 8h07 de Brasília
+    - cron: "37 12,13,14 * * 2,3"   # promo (terça e quarta): 9h37, 10h37 e 11h37
   workflow_dispatch:
     inputs:
       tarefa: {type: choice, options: [bot, bom-dia, promo, conferir, previa], default: bot}
@@ -14,14 +17,17 @@ permissions:
 jobs:
   postar:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # fila separada por tarefa: um bot pendente nunca cancela um story pendente
-    concurrency: ${{ inputs.tarefa || github.event.schedule }}
+    timeout-minutes: 355
+    # um bot por vez (dois lendo o Telegram ao mesmo tempo dá conflito); stories numa fila separada
+    concurrency: ${{ (github.event.schedule == '17 * * * *' || inputs.tarefa == 'bot') && 'bot' || 'stories' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.12", cache: pip, cache-dependency-path: automacao/requirements.txt}
       - run: pip install -q -r automacao/requirements.txt
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: postar
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -35,16 +41,14 @@ jobs:
             export IG_TOKEN
           fi
           case "${{ github.event.schedule }}" in
-            "0 12 * * *") TAREFA=bom-dia ;;
-            "0 14 * * 2,3") TAREFA=promo ;;
-            *) TAREFA="${{ inputs.tarefa || 'bot' }}" ;;
+            "7 9,10,11 * * *") python automacao/postar.py bom-dia ;;
+            "37 12,13,14 * * 2,3") python automacao/postar.py promo ;;
+            "17 * * * *") python automacao/postar.py bot 20400 ;;  # 5h40 ouvindo
+            *) [ "${{ inputs.tarefa }}" = bot ] && python automacao/postar.py bot 20400 || python automacao/postar.py "${{ inputs.tarefa }}" ;;
           esac
-          python automacao/postar.py "$TAREFA"
       - name: salvar fila e estado
         if: always()
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --quiet && exit 0
           git commit -qm "bot: fila/estado"
