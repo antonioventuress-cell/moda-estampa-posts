@@ -21,7 +21,7 @@ from pathlib import Path
 import requests
 
 RAIZ = Path(__file__).parents[1]
-FILA, ESTADO = RAIZ / "fila", RAIZ / "automacao/estado.json"
+FILA, ESTADO, BANCO = RAIZ / "fila", RAIZ / "automacao/estado.json", RAIZ / "banco"
 TOKEN, CHAT = os.environ["TELEGRAM_TOKEN"], os.environ.get("TELEGRAM_CHAT_ID", "")
 IG = "https://graph.instagram.com/v23.0"
 DONO, REPO = os.environ["GITHUB_REPOSITORY"].split("/")
@@ -114,16 +114,54 @@ def receber(msg):
         bruto = Path(tmp) / f"bruto{ext}"
         caminho = tg("getFile", file_id=fid)["file_path"]
         bruto.write_bytes(requests.get(f"https://api.telegram.org/file/bot{TOKEN}/{caminho}", timeout=120).content)
-        if ext == ".mp4" and not shutil.which("ffmpeg"):
-            subprocess.run("sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg", shell=True, check=True)
-        script = "instagram/fotos/padrao_foto.py" if ext == ".jpg" else "motion/vestidos_com_encerramento.py"
-        subprocess.run([sys.executable, str(RAIZ / script), str(bruto), str(FILA / nome)], check=True)
+        editar(bruto, FILA / nome)
     legenda = msg.get("caption") or LEGENDAS[msg["message_id"] % len(LEGENDAS)]
+    mandar_previa(FILA / nome, legenda)
+
+
+def editar(bruto, destino):
+    """Foto: padrão da marca. Vídeo: encerramento com a voz da Amanda."""
+    if destino.suffix == ".mp4" and not shutil.which("ffmpeg"):
+        subprocess.run("sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg", shell=True, check=True)
+    script = "instagram/fotos/padrao_foto.py" if destino.suffix == ".jpg" else "motion/vestidos_com_encerramento.py"
+    subprocess.run([sys.executable, str(RAIZ / script), str(bruto), str(destino)], check=True)
+
+
+def mandar_previa(arq, legenda):
     if HASHTAGS not in legenda:
         legenda += "\n\n" + HASHTAGS
-    metodo, campo = ("sendPhoto", "photo") if ext == ".jpg" else ("sendVideo", "video")
-    with open(FILA / nome, "rb") as f:
-        tg(metodo, {campo: f}, chat_id=CHAT, caption=legenda, reply_markup=botoes(nome))
+    metodo, campo = ("sendPhoto", "photo") if arq.suffix == ".jpg" else ("sendVideo", "video")
+    with open(arq, "rb") as f:
+        tg(metodo, {campo: f}, chat_id=CHAT, caption=legenda, reply_markup=botoes(arq.name))
+
+
+def sugerir():
+    """Post do dia: pega o próximo do banco/ que ainda não foi usado (alterna foto e vídeo), edita, põe na fila e
+    manda a prévia. Você só aprova no Telegram. O agendamento tem 3 tentativas; só a primeira que roda sugere."""
+    hoje = f"{agora():%Y-%m-%d}"
+    estado = json.loads(ESTADO.read_text()) if ESTADO.exists() else {}
+    if estado.get("sugerir") == hoje:
+        return
+    usados = estado.get("usados", [])
+    fotos = [p for p in sorted((BANCO / "fotos").glob("*.jpg")) if p.name not in usados]
+    videos = [p for p in sorted((BANCO / "videos").glob("*.mp4")) if p.name not in usados]
+    ordem = (videos, fotos) if len(usados) % 2 else (fotos, videos)  # alterna; se um tipo acabar, segue com o outro
+    item = next((lista[0] for lista in ordem if lista), None)
+    estado["sugerir"] = hoje
+    if item:
+        FILA.mkdir(exist_ok=True)
+        destino = FILA / f"banco-{item.name}"
+        if item.suffix == ".jpg":
+            shutil.copy(item, destino)  # as fotos do banco já estão no padrão
+        else:
+            editar(item, destino)
+        estado["usados"] = usados + [item.name]
+    ESTADO.write_text(json.dumps(estado, indent=1))
+    salvar("post do dia")  # sobe pro Pages antes de você aprovar
+    if not item:
+        avisar("⚠️ Acabaram as fotos e vídeos do banco. Coloca mais em banco/ que eu volto a sugerir.")
+        return
+    mandar_previa(destino, f"{LEGENDAS[len(usados) % len(LEGENDAS)]}")
 
 
 def responder(cb):
@@ -134,6 +172,8 @@ def responder(cb):
     if str(cb["from"]["id"]) != CHAT:
         return
     acao, nome = cb["data"].split(":")
+    if os.environ.get("GITHUB_ACTIONS"):  # o post do dia é posto na fila por outro job: traz o que chegou
+        subprocess.run("git pull -q --rebase", shell=True, cwd=RAIZ)
     m, arq = cb["message"], FILA / nome
     if not arq.exists():
         avisar("Esse já foi postado ou descartado.")
@@ -218,10 +258,7 @@ def stories(tipo):
 def previa():
     """Manda pro Telegram a prévia (com botões) de cada arquivo que já está na fila — p/ teste sem upload."""
     for i, arq in enumerate(sorted(FILA.glob("*.*"))):
-        metodo, campo = ("sendPhoto", "photo") if arq.suffix == ".jpg" else ("sendVideo", "video")
-        with open(arq, "rb") as f:
-            tg(metodo, {campo: f}, chat_id=CHAT, caption=f"{LEGENDAS[i % len(LEGENDAS)]}\n\n{HASHTAGS}",
-               reply_markup=botoes(arq.name))
+        mandar_previa(arq, LEGENDAS[i % len(LEGENDAS)])
 
 
 def conferir():
@@ -245,6 +282,12 @@ if __name__ == "__main__":
         conferir()
     elif tarefa == "previa":
         previa()
+    elif tarefa == "sugerir":
+        try:
+            sugerir()
+        except Exception as e:
+            avisar(f"❌ Não consegui preparar o post do dia: {e}")
+            raise
     else:
         try:
             stories(tarefa)

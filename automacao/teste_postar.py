@@ -81,6 +81,20 @@ fila_updates += [{"update_id": 5, "message": {"chat": {"id": 42}, "message_id": 
 postar.bot()
 assert any(m == "sendMessage" and "Deu erro" in d.get("text", "") for m, d in enviados)
 assert (postar.FILA / "14.jpg").exists() and not fila_updates
+# 10) post do dia do banco: alterna foto/vídeo, não repete no dia, não reusa, avisa quando acaba
+banco = tmp / "banco"; (banco / "fotos").mkdir(parents=True); (banco / "videos").mkdir()
+shutil.copy(PROJ / "banco/fotos/foto-01.jpg", banco / "fotos/foto-01.jpg")
+shutil.copy(FONTES["vid"], banco / "videos/video-01.mp4")
+postar.BANCO = banco; postar.ESTADO.unlink(missing_ok=True)
+dia1 = oito_horas; postar.agora = lambda: dia1
+postar.sugerir()
+assert enviados[-1][0] == "sendPhoto" and "post:banco-foto-01.jpg" in str(enviados[-1][1]["reply_markup"])
+assert (postar.FILA / "banco-foto-01.jpg").exists()
+n = len(enviados); postar.sugerir(); assert len(enviados) == n  # mesmo dia: não sugere de novo
+postar.agora = lambda: dia1 + postar.timedelta(days=1); postar.sugerir()
+assert enviados[-1][0] == "sendVideo" and (postar.FILA / "banco-video-01.mp4").exists()
+postar.agora = lambda: dia1 + postar.timedelta(days=2); postar.sugerir()
+assert "Acabaram" in enviados[-1][1]["text"]
 # 9) escuta longa: com a fila vazia, para sozinha quando o tempo acaba (não trava)
 import time as _t
 t0 = _t.time(); postar.bot(0.3)
