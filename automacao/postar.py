@@ -135,7 +135,7 @@ def mandar_previa(arq, legenda):
         tg(metodo, {campo: f}, chat_id=CHAT, caption=legenda, reply_markup=botoes(arq.name))
 
 
-def sugerir():
+def sugerir(so_video=False):
     """Post do dia: pega o próximo do banco/ que ainda não foi usado (alterna foto e vídeo), edita, põe na fila e
     manda a prévia. Você só aprova no Telegram. O agendamento tem 3 tentativas; só a primeira que roda sugere."""
     hoje = f"{agora():%Y-%m-%d}"
@@ -145,7 +145,8 @@ def sugerir():
     usados = estado.get("usados", [])
     fotos = [p for p in sorted((BANCO / "fotos").glob("*.jpg")) if p.name not in usados]
     videos = [p for p in sorted((BANCO / "videos").glob("*.mp4")) if p.name not in usados]
-    ordem = (videos, fotos) if len(usados) % 2 else (fotos, videos)  # alterna; se um tipo acabar, segue com o outro
+    # alterna; se um tipo acabar, segue com o outro ("sugerir-video" pede vídeo na hora)
+    ordem = (videos, fotos) if so_video or len(usados) % 2 else (fotos, videos)
     item = next((lista[0] for lista in ordem if lista), None)
     estado["sugerir"] = hoje
     if item:
@@ -282,9 +283,9 @@ if __name__ == "__main__":
         conferir()
     elif tarefa == "previa":
         previa()
-    elif tarefa == "sugerir":
+    elif tarefa in ("sugerir", "sugerir-video"):
         try:
-            sugerir()
+            sugerir(tarefa == "sugerir-video")
         except Exception as e:
             avisar(f"❌ Não consegui preparar o post do dia: {e}")
             raise

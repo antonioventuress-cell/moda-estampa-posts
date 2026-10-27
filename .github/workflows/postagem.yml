@@ -6,11 +6,11 @@ on:
   schedule:
     - cron: "17 * * * *"            # bot: escuta longa (só um por vez; o seguinte espera)
     - cron: "7 9,10,11 * * *"       # bom dia: 6h07, 7h07 e 8h07 de Brasília
-    - cron: "37 12,13,14 * * 2,3"   # promo (terça e quarta): 9h37, 10h37 e 11h37
+    - cron: "7 18,19,20 * * 2,3"    # promo (terça e quarta): 15h07, 16h07 e 17h07
     - cron: "27 10,11,12 * * *"     # post do dia do banco/ (prévia pra aprovar): 7h27, 8h27 e 9h27
   workflow_dispatch:
     inputs:
-      tarefa: {type: choice, options: [bot, sugerir, bom-dia, promo, conferir, previa], default: bot}
+      tarefa: {type: choice, options: [bot, sugerir, sugerir-video, bom-dia, promo, conferir, previa], default: bot}
 
 permissions:
   contents: write
@@ -43,7 +43,7 @@ jobs:
           fi
           case "${{ github.event.schedule }}" in
             "7 9,10,11 * * *") python automacao/postar.py bom-dia ;;
-            "37 12,13,14 * * 2,3") python automacao/postar.py promo ;;
+            "7 18,19,20 * * 2,3") python automacao/postar.py promo ;;
             "27 10,11,12 * * *") python automacao/postar.py sugerir ;;
             "17 * * * *") python automacao/postar.py bot 20400 ;;  # 5h40 ouvindo
             *) [ "${{ inputs.tarefa }}" = bot ] && python automacao/postar.py bot 20400 || python automacao/postar.py "${{ inputs.tarefa }}" ;;
