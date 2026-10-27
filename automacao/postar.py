@@ -122,7 +122,10 @@ def receber(msg):
 def editar(bruto, destino):
     """Foto: padrão da marca. Vídeo: encerramento com a voz da Amanda."""
     if destino.suffix == ".mp4" and not shutil.which("ffmpeg"):
-        subprocess.run("sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg", shell=True, check=True)
+        # sem "apt-get update" primeiro: ele chegou a levar 35 min; só atualiza se a instalação direta falhar
+        subprocess.run("sudo apt-get install -y -qq --no-install-recommends ffmpeg || "
+                       "(sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg)",
+                       shell=True, check=True)
     script = "instagram/fotos/padrao_foto.py" if destino.suffix == ".jpg" else "motion/vestidos_com_encerramento.py"
     subprocess.run([sys.executable, str(RAIZ / script), str(bruto), str(destino)], check=True)
 
