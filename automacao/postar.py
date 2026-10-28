@@ -240,13 +240,35 @@ def agora():
     return datetime.now(timezone(timedelta(hours=-3)))  # Brasília; sem horário de verão desde 2019
 
 
+def relogio():
+    """Chamado a cada 15 min pelo despertador (cron-job.org): faz o que já está na hora e ainda não foi feito hoje
+    (cada coisa guarda no estado o dia em que saiu) e depois lê o Telegram (botões de aprovar)."""
+    h = agora()
+    tarefas = []
+    if h.hour >= 6:
+        tarefas.append(("bom dia", lambda: stories("bom-dia")))
+    if (h.hour, h.minute) >= (7, 30):
+        tarefas.append(("post do dia", sugerir))
+    if h.isoweekday() in (2, 3) and h.hour >= 15:  # terça e quarta
+        tarefas.append(("promo", lambda: stories("promo")))
+    for nome, tarefa in tarefas:
+        try:
+            tarefa()
+        except Exception as e:  # uma falha não impede as outras nem a leitura do Telegram
+            avisar(f"❌ {nome}: {e}")
+    bot()
+
+
 def stories(tipo):
     hoje = agora()
     estado = json.loads(ESTADO.read_text()) if ESTADO.exists() else {}
     if estado.get(tipo) == f"{hoje:%Y-%m-%d}":
         return  # já postou hoje: o agendamento tem 3 tentativas, só a primeira que roda posta
     if tipo == "bom-dia" and hoje.hour >= 12:
-        avisar("⚠️ O GitHub atrasou e já passou do meio-dia: pulei o bom dia de hoje.")
+        estado[tipo] = f"{hoje:%Y-%m-%d}"  # marca como resolvido: avisa uma vez só, não a cada chamada do relógio
+        ESTADO.write_text(json.dumps(estado, indent=1))
+        salvar("estado")
+        avisar("⚠️ Já passou do meio-dia e o bom dia não tinha saído: pulei o de hoje.")
         return
     pasta = f"stories/bom-dia/{hoje.isoweekday()}-*" if tipo == "bom-dia" else "stories/promo-5-primeiras/*"
     arquivos = sorted(RAIZ.glob(f"{pasta}/story.mp4"))  # promo: 1-gancho antes de 2-oferta
@@ -283,6 +305,8 @@ if __name__ == "__main__":
     tarefa = sys.argv[1] if len(sys.argv) > 1 else "bot"
     if tarefa == "bot":
         bot(int(sys.argv[2]) if len(sys.argv) > 2 else 0)
+    elif tarefa == "relogio":
+        relogio()
     elif tarefa == "conferir":
         conferir()
     elif tarefa == "previa":

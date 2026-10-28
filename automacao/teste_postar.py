@@ -74,7 +74,7 @@ assert [p[0].split("/")[-2] for p in publicados[-2:]] == ["1-gancho", "2-oferta"
 postar.ESTADO.unlink()
 postar.agora = lambda: oito_horas.replace(hour=13)
 postar.stories("bom-dia")
-assert len(publicados) == 4 and "pulei o bom dia" in enviados[-1][1]["text"]
+assert len(publicados) == 4 and "pulei" in enviados[-1][1]["text"]
 # 8) loop do bot: uma mensagem com erro avisa e não trava a próxima
 fila_updates += [{"update_id": 5, "message": {"chat": {"id": 42}, "message_id": 13, "photo": [{"file_id": "nao-existe"}]}},
                  {"update_id": 6, "message": {"chat": {"id": 42}, "message_id": 14, "photo": [{"file_id": "foto"}]}}]
@@ -95,6 +95,23 @@ postar.agora = lambda: dia1 + postar.timedelta(days=1); postar.sugerir()
 assert enviados[-1][0] == "sendVideo" and (postar.FILA / "banco-video-01.mp4").exists()
 postar.agora = lambda: dia1 + postar.timedelta(days=2); postar.sugerir()
 assert "Acabaram" in enviados[-1][1]["text"]
+# 11) relógio (a cada 15 min): cada coisa na sua hora, uma vez por dia; bom dia perdido avisa uma vez só
+banco2 = tmp / "banco2"; (banco2 / "fotos").mkdir(parents=True); (banco2 / "videos").mkdir()
+shutil.copy(PROJ / "banco/fotos/foto-02.jpg", banco2 / "fotos/foto-02.jpg")
+postar.BANCO = banco2; postar.ESTADO.unlink(missing_ok=True)
+terca = postar.datetime(2026, 10, 27, 7, 0, tzinfo=postar.timezone(postar.timedelta(hours=-3)))
+p0 = len(publicados)
+postar.agora = lambda: terca; postar.relogio()
+assert len(publicados) == p0 + 1 and publicados[-1][1] == "STORIES"  # só o bom dia
+postar.agora = lambda: terca.replace(hour=16); postar.relogio()
+assert len(publicados) == p0 + 3 and [x[0].split("/")[-2] for x in publicados[-2:]] == ["1-gancho", "2-oferta"]
+assert any(m == "sendPhoto" and "banco-foto-02" in str(d.get("reply_markup")) for m, d in enviados)
+n_pub, n_env = len(publicados), len(enviados)
+postar.agora = lambda: terca.replace(hour=16, minute=15); postar.relogio()
+assert len(publicados) == n_pub and not any(m == "sendMessage" for m, _ in enviados[n_env:])
+quinta13 = terca + postar.timedelta(days=2, hours=6)
+postar.agora = lambda: quinta13; postar.relogio(); postar.relogio()
+assert sum("pulei" in d.get("text", "") for _, d in enviados[n_env:]) == 1
 # 9) escuta longa: com a fila vazia, para sozinha quando o tempo acaba (não trava)
 import time as _t
 t0 = _t.time(); postar.bot(0.3)
