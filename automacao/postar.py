@@ -149,7 +149,8 @@ def sugerir(so_video=False):
     fotos = [p for p in sorted((BANCO / "fotos").glob("*.jpg")) if p.name not in usados]
     videos = [p for p in sorted((BANCO / "videos").glob("*.mp4")) if p.name not in usados]
     # alterna; se um tipo acabar, segue com o outro ("sugerir-video" pede vídeo na hora)
-    ordem = (videos, fotos) if so_video or len(usados) % 2 else (fotos, videos)
+    video_agora = so_video or (usados and usados[-1].endswith(".jpg"))  # o contrário do último que saiu
+    ordem = (videos, fotos) if video_agora else (fotos, videos)
     item = next((lista[0] for lista in ordem if lista), None)
     estado["sugerir"] = hoje
     if item:
